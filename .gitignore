@@ -1,0 +1,9 @@
+selenium
+bs.html
+output.txt
+*.png
+*.json
+__pycache__
+env.txt
+chromedriver
+*.deb
