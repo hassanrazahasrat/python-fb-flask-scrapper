@@ -1,61 +1,80 @@
 import argparse
 import time
 import json
-import csv
+import re
+
 from typing import Any
+from unittest import result
 from urllib.parse import quote
 
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup as bs
+from bs4 import BeautifulSoup as bs, Tag
 
-
+FACEBOOK_URL = "https://m.facebook.com"
 with open('env.txt') as file:
     EMAIL = file.readline().split('"')[1]
     PASSWORD = file.readline().split('"')[1]
 
-def _process_post(post_source):
+def _process_post(postTag: Tag):
     post = dict()
-    post['title'] = _extract_post_user(post_source)
-    post['content'] = _extract_post_text(post_source)
-    post['images'] = _extract_images(post_source)
+    post['user'] = _extract_post_user(postTag)
+    post['group'] = _extract_post_group(postTag)
+    post['content'] = _extract_post_text(postTag)
+    post['image'] = _extract_post_images(postTag)
+    post['link'] = _extract_post_link(postTag)
+    post['time'] = _extract_post_time(postTag)
 
     return post
 
-def _extract_post_user(post):
-    return post.select_one('.story_body_container > header > div:nth-child(2) h3 strong a').string.strip()
+def _extract_post_user(post: Tag):
+    user_tag = post.select_one('.story_body_container > header > div:nth-child(2) h3 strong:first-child')
 
-def _extract_post_text(item: Any):
-    body = item.select('.story_body_container > div span > p')
-    text = ""
-    for index in range(0, len(body)):
-        if body[index].string is not None:
-            text += body[index].string
+    return None if user_tag is None else {
+        'name': user_tag.text.strip(),
+        'profile_url': user_tag.select_one('a').get('href')
+    }
+
+def _extract_post_group(post: Tag):
+    group_tag = post.select_one('.story_body_container > header > div:nth-child(2) h3 strong:last-child')
+    
+    return {
+        'name': group_tag.text.strip(),
+        'profile_url': group_tag.select_one('a').get('href')
+    }
+
+def _extract_post_text(post: Tag):
+    body = post.select_one('.story_body_container > div span:first-child')
+    text = body.text if body is not None else ""
 
     return text.strip().replace('  ', ' ')
 
+def _extract_post_images(post: Tag):
+    picture = post.select_one(".story_body_container > div + div  a i.img")
+    text = picture.get('style') if picture is not None else ""
 
-def _extract_images(item):
-    postPictures = item.select(".story_body_container > div:nth-child(2) a")
-    images = list()
-    for postPicture in postPictures:
-        images.append(postPicture.get('href'))
+    search = re.search('url(.*)\);', text)
 
-    return images
+    return search.group(1).replace('\\3a ', ':').replace("'", '').removeprefix('(') if search is not None else ""
 
+def _extract_post_link(post: Tag):
+    link_html = post.select_one(".story_body_container > div + div > section > a")
 
-def _extract_html(bs_data):
-    if len(bs_data) == 0:
+    return link_html.get('href') if link_html is not None else ""
+
+def _extract_post_time(post: Tag):
+    return post.select_one('.story_body_container > header > div:nth-child(2) h3 + div > a > abbr').text.strip()
+
+def _extract_html(bs_data: bs):
+    if bs_data is None:
         print("Empty source code")
 
         return dict()
 
-    #Add to check
+    # Add to check
     with open('./bs.html',"w", encoding="utf-8") as file:
         file.write(str(bs_data.prettify()))
-
-    # with open('./bs.html', 'r', encoding='utf-8') as file:
-    #     bs_data = bs(file.read().replace('\n', ''), 'html.parser')
 
     k = bs_data.select("#BrowseResultsContainer [data-testid=results] [data-module-result-type=story] > div")
     postBigDict = list()
@@ -65,24 +84,23 @@ def _extract_html(bs_data):
 
         postBigDict.append(postDict)
 
+        # For testing
         with open('./postBigDict.json','w', encoding='utf-8') as file:
             file.write(json.dumps(postBigDict, ensure_ascii=False).encode('utf-8').decode())
 
     return postBigDict
 
-
-def _login(browser, email, password):
-    browser.get("https://m.facebook.com")
+def _login(browser: WebDriver, email: str, password: str):
+    browser.get(FACEBOOK_URL)
     browser.maximize_window()
     browser.find_element("name", "email").send_keys(email)
     browser.find_element("name", "pass").send_keys(password)
     browser.find_element("name", 'login').click()
 
     print('Logged In...')
-    time.sleep(5)
+    time.sleep(1)
 
-
-def _count_needed_scrolls(browser, infinite_scroll, numOfPost):
+def _count_needed_scrolls(browser: WebDriver, infinite_scroll, numOfPost):
     if infinite_scroll:
         lenOfPage = browser.execute_script(
             "window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;"
@@ -93,8 +111,7 @@ def _count_needed_scrolls(browser, infinite_scroll, numOfPost):
     print("Number Of Scrolls Needed " + str(lenOfPage))
     return lenOfPage
 
-
-def _scroll(browser, infinite_scroll, lenOfPage):
+def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
     lastCount = -1
     match = False
 
@@ -120,8 +137,7 @@ def _scroll(browser, infinite_scroll, lenOfPage):
         if lastCount == lenOfPage:
             match = True
 
-
-def extract(page, numOfPost=8, infinite_scroll=False, scrape_comment=False):
+def extract(page, numOfPost=8, infinite_scroll=False):
     if page is None:
         return {
             'error': 'enter a query'
@@ -137,21 +153,17 @@ def extract(page, numOfPost=8, infinite_scroll=False, scrape_comment=False):
     # chromedriver should be in the same folder as file
     browser = webdriver.Chrome(executable_path="./chromedriver", options=_get_chrome_options())
     
-    page_url = f"https://m.facebook.com/search/latest/?q={encodedPage}&ref=content_filter&source=typeahead"
-
-    print("Fetching " + page_url)
-
-    browser.get(page_url)
-    lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
-    _scroll(browser, infinite_scroll, lenOfPage)
-
-    source_data = browser.page_source
+    source_data = _search_facebook(browser, encodedPage)
 
     if (page in source_data):
         print("It's logged in")
     else:
         print("It's not logged in")
         _login(browser, EMAIL, PASSWORD)
+        source_data = _search_facebook(browser, encodedPage)
+
+    lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
+    _scroll(browser, infinite_scroll, lenOfPage)
 
     # Throw your source into BeautifulSoup and start parsing!
     bs_data = bs(source_data, 'html.parser')
@@ -160,6 +172,13 @@ def extract(page, numOfPost=8, infinite_scroll=False, scrape_comment=False):
     browser.close()
 
     return postBigDict
+
+def _search_facebook(browser: WebDriver, term: str) -> str :
+    page_url = f"{FACEBOOK_URL}/search/latest/?q={term}&ref=content_filter&source=typeahead"
+    print("Fetching " + page_url)
+    browser.get(page_url)
+
+    return browser.page_source
 
 def _get_chrome_options():
     option = Options()
@@ -180,48 +199,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Facebook Page Scraper")
     required_parser = parser.add_argument_group("required arguments")
     required_parser.add_argument('-page', '-p', help="The Facebook Public Page you want to scrape", required=True)
-    required_parser.add_argument('-len', '-l', help="Number of Posts you want to scrape", type=int, required=True)
     optional_parser = parser.add_argument_group("optional arguments")
+    optional_parser.add_argument('-len', '-l', 
+                            help="Number of Posts you want to scrape", type=int, default=2)
     optional_parser.add_argument('-infinite', '-i',
-                                 help="Scroll until the end of the page (1 = infinite) (Default is 0)", type=int,
-                                 default=0)
-    optional_parser.add_argument('-usage', '-u', help="What to do with the data: "
-                                                      "Print on Screen (PS), "
-                                                      "Write to Text File (WT) (Default is WT)", default="WT")
-
-    optional_parser.add_argument('-comments', '-c', help="Scrape ALL Comments of Posts (y/n) (Default is n). When "
-                                                         "enabled for pages where there are a lot of comments it can "
-                                                         "take a while", default="No")
+                            help="Scroll until the end of the page (1 = infinite) (Default is 0)", type=int,
+                            default=0)
     args = parser.parse_args()
 
     infinite = False
     if args.infinite == 1:
         infinite = True
 
-    scrape_comment = False
-    if args.comments == 'y':
-        scrape_comment = True
+    postBigDict = extract(page=args.page, numOfPost=args.len, infinite_scroll=infinite)
 
-    postBigDict = extract(page=args.page, numOfPost=args.len, infinite_scroll=infinite, scrape_comment=scrape_comment)
-
-    #TODO: rewrite parser
-    if args.usage == "WT":
-        with open('output.txt', 'w') as file:
-            for post in postBigDict:
-                file.write(json.dumps(post))  # use json load to recover
-
-    elif args.usage == "CSV":
-        with open('data.csv', 'w',) as csvfile:
-           writer = csv.writer(csvfile)
-           #writer.writerow(['Post', 'Link', 'Image', 'Comments', 'Reaction'])
-           writer.writerow(['Post', 'Link', 'Image', 'Comments', 'Shares'])
-
-           for post in postBigDict:
-              writer.writerow([post['Post'], post['Link'],post['Image'], post['Comments'], post['Shares']])
-              #writer.writerow([post['Post'], post['Link'],post['Image'], post['Comments'], post['Reaction']])
-
-    else:
-        for post in postBigDict:
-            print(post)
+    for post in postBigDict:
+        print(post)
 
     print("Finished")
