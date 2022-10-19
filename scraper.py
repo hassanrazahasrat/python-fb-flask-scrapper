@@ -1,4 +1,5 @@
 import argparse
+import string
 import time
 import json
 import re
@@ -14,8 +15,9 @@ from bs4 import BeautifulSoup as bs, Tag
 
 FACEBOOK_URL = "https://m.facebook.com"
 with open('env.txt') as file:
-    EMAIL = file.readline().split('"')[1]
-    PASSWORD = file.readline().split('"')[1]
+    line = file.read().split('\n')
+    EMAIL = line[0].split('"')[1]
+    PASSWORD = line[1].split('"')[1]
 
 def _process_post(postTag: Tag):
     post = dict()
@@ -23,7 +25,8 @@ def _process_post(postTag: Tag):
     post['group'] = _extract_post_group(postTag)
     post['content'] = _extract_post_text(postTag)
     post['image'] = _extract_post_images(postTag)
-    post['link'] = _extract_post_link(postTag)
+    post['content_link'] = _extract_post_link(postTag)
+    post['permalink'] = _format_link(_extract_post_permalink(postTag))
     post['time'] = _extract_post_time(postTag)
 
     return post
@@ -39,7 +42,7 @@ def _extract_post_user(post: Tag):
 def _extract_post_group(post: Tag):
     group_tag = post.select_one('.story_body_container > header > div:nth-child(2) h3 strong:last-child')
     
-    return {
+    return None if group_tag is None else {
         'name': group_tag.text.strip(),
         'profile_url': group_tag.select_one('a').get('href')
     }
@@ -60,6 +63,11 @@ def _extract_post_images(post: Tag):
 
 def _extract_post_link(post: Tag):
     link_html = post.select_one(".story_body_container > div + div > section > a")
+
+    return link_html.get('href') if link_html is not None else ""
+
+def _extract_post_permalink(post: Tag):
+    link_html = post.select_one(".story_body_container + footer > div > div + div > div + div > a")
 
     return link_html.get('href') if link_html is not None else ""
 
@@ -90,6 +98,13 @@ def _extract_html(bs_data: bs):
 
     return postBigDict
 
+def _format_link(link: str):
+    _final = link
+    if link.startswith('/'):
+        _final = "https://www.facebook.com" + link
+    
+    return _final
+
 def _login(browser: WebDriver, email: str, password: str):
     browser.get(FACEBOOK_URL)
     browser.maximize_window()
@@ -98,7 +113,7 @@ def _login(browser: WebDriver, email: str, password: str):
     browser.find_element("name", 'login').click()
 
     print('Logged In...')
-    time.sleep(1)
+    time.sleep(5)
 
 def _count_needed_scrolls(browser: WebDriver, infinite_scroll, numOfPost):
     if infinite_scroll:
