@@ -8,6 +8,7 @@ from typing import Any
 from unittest import result
 from urllib.parse import quote
 
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -176,6 +177,14 @@ def extract(page, numOfPost=8, infinite_scroll=False):
         print("It's not logged in")
         _login(browser, EMAIL, PASSWORD)
         source_data = _search_facebook(browser, encodedPage)
+
+        if "Log in with one" in source_data:
+            print("Post login shit 'Log in with one tap' trying to skip")
+            not_button = browser.find_element(By.CSS_SELECTOR, 'a')
+            if not_button is not None:
+                not_button.click()
+            else:
+                print("Couldn't found the skip button :-(")
 
     lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
     _scroll(browser, infinite_scroll, lenOfPage)
