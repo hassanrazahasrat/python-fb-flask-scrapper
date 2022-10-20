@@ -109,9 +109,25 @@ def _format_link(link: str):
 def _login(browser: WebDriver, email: str, password: str):
     browser.get(FACEBOOK_URL)
     browser.maximize_window()
-    browser.find_element("name", "email").send_keys(email)
-    browser.find_element("name", "pass").send_keys(password)
-    browser.find_element("name", 'login').click()
+
+    user_button = browser.find_element(By.CSS_SELECTOR, '[role=button][aria-label^="Tap to log in to Facebook"]')
+    if user_button is not None:
+        user_button.click()
+
+        password_field = browser.find_element('name', 'pass')
+        if password_field is not None:
+            password_field.send_keys(password)
+            browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
+
+        not_button = browser.find_element(By.LINK_TEXT, 'Not Now')
+        if not_button is not None:
+            not_button.click()
+
+        time.sleep(5)
+    else:
+        browser.find_element("name", "email").send_keys(email)
+        browser.find_element("name", "pass").send_keys(password)
+        browser.find_element("name", 'login').click()
 
     print('Logged In...')
     time.sleep(5)
@@ -171,7 +187,7 @@ def extract(page, numOfPost=8, infinite_scroll=False):
     
     source_data = _search_facebook(browser, encodedPage)
 
-    if (page in source_data):
+    if (page in source_data and "Facebook Search" in source_data):
         print("It's logged in")
     else:
         print("It's not logged in")
@@ -180,7 +196,7 @@ def extract(page, numOfPost=8, infinite_scroll=False):
 
         if "Log in with one" in source_data:
             print("Post login shit 'Log in with one tap' trying to skip")
-            not_button = browser.find_element(By.CSS_SELECTOR, 'a')
+            not_button = browser.find_element(By.LINK_TEXT, 'Not Now')
             if not_button is not None:
                 not_button.click()
             else:
@@ -206,10 +222,12 @@ def _search_facebook(browser: WebDriver, term: str) -> str :
 
 def _get_chrome_options():
     option = Options()
+    option.add_argument('--no-sandbox')
     option.add_argument("--disable-infobars")
     option.add_argument("start-maximized")
     option.add_argument("--disable-extensions")
     option.add_argument("user-data-dir=selenium")
+    option.add_argument("--disable-dev-shm-usage")
     option.headless = True
 
     # Pass the argument 1 to allow and 2 to block

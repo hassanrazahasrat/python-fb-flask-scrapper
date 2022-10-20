@@ -7,3 +7,5 @@ __pycache__
 env.txt
 chromedriver
 *.deb
+venv
+.DS_Store
