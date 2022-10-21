@@ -1,5 +1,5 @@
 import argparse
-import string
+import os
 import time
 import json
 import re
@@ -15,6 +15,8 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup as bs, Tag
 
 FACEBOOK_URL = "https://m.facebook.com"
+counter = 1
+
 with open('env.txt') as file:
     line = file.read().split('\n')
     EMAIL = line[0].split('"')[1]
@@ -24,9 +26,7 @@ def _process_post(postTag: Tag):
     post = dict()
     post['user'] = _extract_post_user(postTag)
     post['group'] = _extract_post_group(postTag)
-    post['content'] = _extract_post_text(postTag)
-    post['image'] = _extract_post_images(postTag)
-    post['content_link'] = _extract_post_link(postTag)
+    post['content'] = _extract_post_content(postTag)
     post['permalink'] = _format_link(_extract_post_permalink(postTag))
     post['time'] = _extract_post_time(postTag)
 
@@ -37,7 +37,7 @@ def _extract_post_user(post: Tag):
 
     return None if user_tag is None else {
         'name': user_tag.text.strip(),
-        'profile_url': user_tag.select_one('a').get('href')
+        'profile_url': _format_link(user_tag.select_one('a').get('href'))
     }
 
 def _extract_post_group(post: Tag):
@@ -45,7 +45,18 @@ def _extract_post_group(post: Tag):
     
     return None if group_tag is None else {
         'name': group_tag.text.strip(),
-        'profile_url': group_tag.select_one('a').get('href')
+        'profile_url': _format_link(group_tag.select_one('a').get('href'))
+    }
+
+def _extract_post_content(post: Tag):
+    text = _extract_post_text(post)
+    link = _extract_post_link(post)
+    image = _extract_post_images(post)
+
+    return {
+        'text': text,
+        'link': link,
+        'image': image,
     }
 
 def _extract_post_text(post: Tag):
@@ -107,30 +118,42 @@ def _format_link(link: str):
     return _final
 
 def _login(browser: WebDriver, email: str, password: str):
+    print("Logging in: Loading login page")
     browser.get(FACEBOOK_URL)
+    print("Logging in: Loaded login page")
     browser.maximize_window()
 
-    user_button = browser.find_element(By.CSS_SELECTOR, '[role=button][aria-label^="Tap to log in to Facebook"]')
+    user_button = _find_element(browser, By.CSS_SELECTOR, '[role=button][aria-label^="Tap to log in to Facebook as"]')
     if user_button is not None:
+        print("Short Login button found, clicking...")
         user_button.click()
+        time.sleep(0.5)
 
-        password_field = browser.find_element('name', 'pass')
+        password_field = _find_element(browser, 'name', 'pass')
         if password_field is not None:
+            print("Filling password...")
+            
             password_field.send_keys(password)
             browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
 
-        not_button = browser.find_element(By.LINK_TEXT, 'Not Now')
+            time.sleep(6)
+
+        not_button = _find_element(browser, By.LINK_TEXT, 'Not Now')
         if not_button is not None:
+            print("Account saving dialog appeared")
             not_button.click()
 
-        time.sleep(5)
+        time.sleep(2)
     else:
         browser.find_element("name", "email").send_keys(email)
         browser.find_element("name", "pass").send_keys(password)
         browser.find_element("name", 'login').click()
-
+        
+        print("Trying to login waiting")
+        time.sleep(6)
+    
+    _out_to_file(browser.page_source)
     print('Logged In...')
-    time.sleep(5)
 
 def _count_needed_scrolls(browser: WebDriver, infinite_scroll, numOfPost):
     if infinite_scroll:
@@ -170,7 +193,7 @@ def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
             match = True
 
 def extract(page, numOfPost=8, infinite_scroll=False):
-    if page is None:
+    if page is None or page == "favicon.ico":
         return {
             'error': 'enter a query'
         }
@@ -183,7 +206,8 @@ def extract(page, numOfPost=8, infinite_scroll=False):
     encodedPage = quote(page)
     
     # chromedriver should be in the same folder as file
-    browser = webdriver.Chrome(executable_path="./chromedriver", options=_get_chrome_options())
+    current_dir = os.getcwd()
+    browser = webdriver.Chrome(executable_path=f"{current_dir}/chromedriver", options=_get_chrome_options())
     
     source_data = _search_facebook(browser, encodedPage)
 
@@ -202,14 +226,14 @@ def extract(page, numOfPost=8, infinite_scroll=False):
             else:
                 print("Couldn't found the skip button :-(")
 
-    lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
-    _scroll(browser, infinite_scroll, lenOfPage)
+    # lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
+    # _scroll(browser, infinite_scroll, lenOfPage)
 
     # Throw your source into BeautifulSoup and start parsing!
     bs_data = bs(source_data, 'html.parser')
+    browser.close()
 
     postBigDict = _extract_html(bs_data)
-    browser.close()
 
     return postBigDict
 
@@ -217,6 +241,7 @@ def _search_facebook(browser: WebDriver, term: str) -> str :
     page_url = f"{FACEBOOK_URL}/search/latest/?q={term}&ref=content_filter&source=typeahead"
     print("Fetching " + page_url)
     browser.get(page_url)
+    print(f"Fetched {page_url}")
 
     return browser.page_source
 
@@ -226,7 +251,8 @@ def _get_chrome_options():
     option.add_argument("--disable-infobars")
     option.add_argument("start-maximized")
     option.add_argument("--disable-extensions")
-    option.add_argument("user-data-dir=selenium")
+    dir_path = os.getcwd()
+    option.add_argument(f"user-data-dir={dir_path}/selenium")
     option.add_argument("--disable-dev-shm-usage")
     option.headless = True
 
@@ -236,6 +262,21 @@ def _get_chrome_options():
     })
 
     return option
+
+def _find_element(browser: WebDriver, by: str, value: str):
+    try:
+        ret_value = browser.find_element(by, value)
+    except:
+        ret_value = None
+
+    return ret_value
+
+def _out_to_file(data: str):
+    global counter
+
+    with open(f"file-{counter}.raw", 'w', encoding='utf-8') as file:
+        file.write(data.encode('utf-8').decode())
+    counter += 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Facebook Page Scraper")
