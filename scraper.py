@@ -70,8 +70,8 @@ def _extract_post_images(post: Tag):
     text = picture.get('style') if picture is not None else ""
 
     search = re.search('url(.*)\);', text)
-
-    return search.group(1).replace('\\3a ', ':').replace("'", '').removeprefix('(') if search is not None else ""
+    # .replace('\\3a ', ':').replace("'", '').removeprefix('(')
+    return _replace_special_chars(search.group(1)) if search is not None else ""
 
 def _extract_post_link(post: Tag):
     link_html = post.select_one(".story_body_container > div + div > section > a")
@@ -277,6 +277,13 @@ def _out_to_file(data: str):
     with open(f"file-{counter}.raw", 'w', encoding='utf-8') as file:
         file.write(data.encode('utf-8').decode())
     counter += 1
+
+def _replace_special_chars(text: str):
+    text = text.removeprefix("('").replace('\\3a ', ':')
+    text = text.replace('\\3d ', '=').replace('\\26 ', '&')
+    text = text.removesuffix("'")
+
+    return text
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Facebook Page Scraper")

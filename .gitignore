@@ -5,7 +5,7 @@ output.txt
 *.json
 __pycache__
 env.txt
-chromedriver
+chromedriver*
 *.deb
 *.raw
 venv
