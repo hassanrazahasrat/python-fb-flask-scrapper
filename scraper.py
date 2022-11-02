@@ -165,6 +165,9 @@ def _login(browser: WebDriver, email: str, password: str):
                     password_field.send_keys(password)
                     browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
 
+                    print('Submitting')
+                    time.sleep(6)
+
         print("Trying to login waiting")
         time.sleep(6)
     
