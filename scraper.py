@@ -170,9 +170,7 @@ def _login(browser: WebDriver, email: str, password: str):
 
         print("Trying to login waiting")
         time.sleep(6)
-    
-    _screenshot(browser)
-    _out_to_file(browser.page_source)
+
     print('Logged In...')
 
 def _count_needed_scrolls(browser: WebDriver, infinite_scroll, numOfPost):
@@ -193,6 +191,7 @@ def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
     if lenOfPage == 1:
         return
 
+    print("Scrolling start")
     while not match:
         if infinite_scroll:
             lastCount = lenOfPage
@@ -201,13 +200,17 @@ def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
 
         # wait for the browser to load, this time can be changed slightly ~3 seconds with no difference, but 5 seems
         # to be stable enough
-        time.sleep(5)
+        if lastCount == 0:
+            time.sleep(2)
+        else:
+            time.sleep(6)
 
         if infinite_scroll:
             lenOfPage = browser.execute_script(
                 "window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return "
                 "lenOfPage;")
         else:
+            print(f"LastScroll: {lastCount}")
             browser.execute_script(
                 "window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return "
                 "lenOfPage;")
@@ -253,6 +256,9 @@ def extract(page, numOfPost=8, infinite_scroll=False):
 
         lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
         _scroll(browser, infinite_scroll, lenOfPage)
+
+        time.sleep(2)
+        source_data = browser.page_source
     except Exception as e:
         source_data = '<html></html>'
         browser.save_screenshot(f"static/error-{counter}.png")
