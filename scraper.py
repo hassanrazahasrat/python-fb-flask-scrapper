@@ -70,7 +70,6 @@ def _extract_post_images(post: Tag):
     text = picture.get('style') if picture is not None else ""
 
     search = re.search('url(.*)\);', text)
-    # .replace('\\3a ', ':').replace("'", '').removeprefix('(')
     return _replace_special_chars(search.group(1)) if search is not None else ""
 
 def _extract_post_link(post: Tag):
@@ -84,7 +83,9 @@ def _extract_post_permalink(post: Tag):
     return link_html.get('href') if link_html is not None else ""
 
 def _extract_post_time(post: Tag):
-    return post.select_one('.story_body_container > header > div:nth-child(2) h3 + div > a > abbr').text.strip()
+    time_tag = post.select_one('.story_body_container > header > div:nth-child(2) h3 + div > a > abbr')
+    
+    return time_tag.text.strip() if time_tag is not None else "N/A"
 
 def _extract_html(bs_data: bs):
     if bs_data is None:
@@ -145,9 +146,16 @@ def _login(browser: WebDriver, email: str, password: str):
 
         time.sleep(2)
     else:
-        browser.find_element("name", "email").send_keys(email)
-        browser.find_element("name", "pass").send_keys(password)
-        browser.find_element("name", 'login').click()
+        email_button = _find_element(browser, By.CSS_SELECTOR, '[name=email]')
+        if email_button is not None:
+            browser.find_element("name", "email").send_keys(email)
+            browser.find_element("name", "pass").send_keys(password)
+            browser.find_element("name", 'login').click()
+        elif "Tap to log into Facebook as" in browser.page_source:
+            _button = _find_element(browser, By.CSS_SELECTOR, '[value=login_no_pin]')
+            if _button is not None:
+                print('Submitting fast login')
+                _button.submit()
         
         print("Trying to login waiting")
         time.sleep(6)
@@ -169,6 +177,9 @@ def _count_needed_scrolls(browser: WebDriver, infinite_scroll, numOfPost):
 def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
     lastCount = -1
     match = False
+
+    if lenOfPage == 1:
+        return
 
     while not match:
         if infinite_scroll:
@@ -193,6 +204,8 @@ def _scroll(browser: WebDriver, infinite_scroll, lenOfPage):
             match = True
 
 def extract(page, numOfPost=8, infinite_scroll=False):
+    global counter
+    
     if page is None or page == "favicon.ico":
         return {
             'error': 'enter a query'
@@ -208,26 +221,30 @@ def extract(page, numOfPost=8, infinite_scroll=False):
     # chromedriver should be in the same folder as file
     current_dir = os.getcwd()
     browser = webdriver.Chrome(executable_path=f"{current_dir}/chromedriver", options=_get_chrome_options())
-    
-    source_data = _search_facebook(browser, encodedPage)
-
-    if (page in source_data and "Facebook Search" in source_data):
-        print("It's logged in")
-    else:
-        print("It's not logged in")
-        _login(browser, EMAIL, PASSWORD)
+    try:
         source_data = _search_facebook(browser, encodedPage)
 
-        if "Log in with one" in source_data:
-            print("Post login shit 'Log in with one tap' trying to skip")
-            not_button = browser.find_element(By.LINK_TEXT, 'Not Now')
-            if not_button is not None:
-                not_button.click()
-            else:
-                print("Couldn't found the skip button :-(")
+        if (page in source_data and "Facebook Search" in source_data):
+            print("It's logged in")
+        else:
+            print("It's not logged in")
+            _login(browser, EMAIL, PASSWORD)
+            source_data = _search_facebook(browser, encodedPage)
 
-    # lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
-    # _scroll(browser, infinite_scroll, lenOfPage)
+            if "Log in with one" in source_data:
+                print("Post login shit 'Log in with one tap' trying to skip")
+                not_button = browser.find_element(By.LINK_TEXT, 'Not Now')
+                if not_button is not None:
+                    not_button.click()
+                else:
+                    print("Couldn't found the skip button :-(")
+
+        lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
+        _scroll(browser, infinite_scroll, lenOfPage)
+    except:
+        source_data = '<html></html>'
+        browser.save_screenshot(f"error-{counter}.png")
+        counter += 1
 
     # Throw your source into BeautifulSoup and start parsing!
     bs_data = bs(source_data, 'html.parser')

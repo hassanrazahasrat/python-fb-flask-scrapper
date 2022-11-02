@@ -1,5 +1,6 @@
 from flask import Flask, request
 from scraper import extract
+from http_helpers import is_valid_request
 
 app = Flask(__name__)
 
@@ -10,9 +11,10 @@ def index():
 
     return result
 
-@app.get('/<query>')
+@app.get('/q/<query>')
 def indexQuery(query):
     try:
+        valid_request = is_valid_request(request)
         limit = int(request.args.get('num_posts', 8))
     except ValueError:
         limit = 8
