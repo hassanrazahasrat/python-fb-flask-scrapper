@@ -163,7 +163,7 @@ def _login(browser: WebDriver, email: str, password: str):
                     print("Filling password...")
                     
                     password_field.send_keys(password)
-                    browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
+                    browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log In"]').click()
 
                     print('Submitting')
                     time.sleep(6)
@@ -253,9 +253,10 @@ def extract(page, numOfPost=8, infinite_scroll=False):
 
         lenOfPage = _count_needed_scrolls(browser, infinite_scroll, numOfPost)
         _scroll(browser, infinite_scroll, lenOfPage)
-    except:
+    except Exception as e:
         source_data = '<html></html>'
-        browser.save_screenshot(f"error-{counter}.png")
+        browser.save_screenshot(f"static/error-{counter}.png")
+        _out_to_file(str(e))
         counter += 1
 
     # Throw your source into BeautifulSoup and start parsing!
