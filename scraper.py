@@ -156,10 +156,19 @@ def _login(browser: WebDriver, email: str, password: str):
             if _button is not None:
                 print('Submitting fast login')
                 _button.submit()
-        
+                time.sleep(2)
+
+                password_field = _find_element(browser, 'name', 'pass')
+                if password_field is not None:
+                    print("Filling password...")
+                    
+                    password_field.send_keys(password)
+                    browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
+
         print("Trying to login waiting")
         time.sleep(6)
     
+    _screenshot(browser)
     _out_to_file(browser.page_source)
     print('Logged In...')
 
@@ -301,6 +310,11 @@ def _replace_special_chars(text: str):
     text = text.removesuffix("'")
 
     return text
+
+def _screenshot(browser: WebDriver, shot_type = 'info'):
+    global counter
+
+    browser.save_screenshot(f"static/shot={shot_type}-{counter}.png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Facebook Page Scraper")
