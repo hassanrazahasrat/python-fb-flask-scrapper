@@ -4,8 +4,6 @@ import time
 import json
 import re
 
-from typing import Any
-from unittest import result
 from urllib.parse import quote
 
 from selenium.webdriver.common.by import By
@@ -129,7 +127,7 @@ def _login(browser: WebDriver, email: str, password: str):
         print("Short Login button found, clicking...")
         user_button.click()
         time.sleep(0.5)
-
+        _screenshot(browser, None, 'short-login-1')
         password_field = _find_element(browser, 'name', 'pass')
         if password_field is not None:
             print("Filling password...")
@@ -138,6 +136,7 @@ def _login(browser: WebDriver, email: str, password: str):
             browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log in"]').click()
 
             time.sleep(6)
+            _screenshot(browser, None, 'short-login-2')
 
         not_button = _find_element(browser, By.LINK_TEXT, 'Not Now')
         if not_button is not None:
@@ -151,6 +150,7 @@ def _login(browser: WebDriver, email: str, password: str):
             browser.find_element("name", "email").send_keys(email)
             browser.find_element("name", "pass").send_keys(password)
             browser.find_element("name", 'login').click()
+            print('Normal Login Button clicked')
         elif "Tap to log into Facebook as" in browser.page_source:
             _button = _find_element(browser, By.CSS_SELECTOR, '[value=login_no_pin]')
             if _button is not None:
@@ -166,10 +166,11 @@ def _login(browser: WebDriver, email: str, password: str):
                     browser.find_element(By.CSS_SELECTOR, 'button[type=submit][value="Log In"]').click()
 
                     print('Submitting')
-                    time.sleep(6)
+                    time.sleep(2)
 
-        print("Trying to login waiting")
-        time.sleep(6)
+        print("Trying to login waiting for 12 seconds")
+        time.sleep(12)
+        _screenshot(browser, None, 'after-login-wait')
 
     print('Logged In...')
 
@@ -261,7 +262,7 @@ def extract(page, numOfPost=8, infinite_scroll=False):
         source_data = browser.page_source
     except Exception as e:
         source_data = '<html></html>'
-        browser.save_screenshot(f"static/error-{counter}.png")
+        _screenshot(browser, 'error')
         _out_to_file(str(e))
         counter += 1
 
@@ -278,6 +279,7 @@ def _search_facebook(browser: WebDriver, term: str) -> str :
     print("Fetching " + page_url)
     browser.get(page_url)
     print(f"Fetched {page_url}")
+    _screenshot(browser, None, 'search-page')
 
     return browser.page_source
 
@@ -321,10 +323,10 @@ def _replace_special_chars(text: str):
 
     return text
 
-def _screenshot(browser: WebDriver, shot_type = 'info'):
+def _screenshot(browser: WebDriver, shot_type: str | None = 'info', filename: str | None = None):
     global counter
 
-    browser.save_screenshot(f"static/shot={shot_type}-{counter}.png")
+    browser.save_screenshot(f"static/shot-{shot_type if shot_type is not None else 'info'}-{counter if filename is None else filename}.png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Facebook Page Scraper")
